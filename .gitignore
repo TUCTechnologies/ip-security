@@ -1,2 +1,5 @@
 #Ignore folder named 'zones'
 zones/
+
+#Ignore .DS_Store
+.DS_Store
