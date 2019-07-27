@@ -30,6 +30,8 @@ Below is how you can remove entries:
 
  .\Import-Firewall-Blocklist.ps1 -DeleteOnly
 
+For the protection of the person running the script, it is required to press a key after the zones have been imported. This is important when running the script on remote systems. Failing to press a key assumes that connection to the remote system has been lost, thus changes are rolled back.
+
 
 ENJOY!
 
