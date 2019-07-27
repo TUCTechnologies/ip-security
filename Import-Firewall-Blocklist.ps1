@@ -1,10 +1,11 @@
 ####################################################################################
 #.Synopsis
-#    Block all IP addresses listed in a text file using the Windows Firewall.
+#    Block IP addresses associated with countries listed in a text file using the
+#    Windows Firewall.
 #
 #.Description
 #    Script will create inbound and outbound rules in the Windows Firewall to
-#    block all the IPv4 and/or IPv6 addresses listed in an input text file.  IP
+#    block all the IPv4 and/or IPv6 addresses listed in an input text file. IP
 #    address ranges can be defined with CIDR notation (10.4.0.0/16) or with a
 #    dash (10.4.0.0-10.4.255.255).  Comments and blank lines are ignored in the
 #    input file.  The script deletes and recreates the rules each time the
@@ -18,8 +19,8 @@
 #    need to use CIDR notation for this (10.1.1.1/32), though this does work.
 #
 #.Parameter ZonesFile
-#    File containing IP addresses and ranges to block; IPv4 and IPv6 supported.
-#    By default, the script will look for and use a file named 'ZonesFile.txt'.
+#    File containing ISO 3166-1 alpha-2 country codes to lookup IP address info;
+#    By default, the script will look for and use a file named 'countrycodes.txt'.
 #
 #.Parameter RuleName
 #    (Optional) Override default firewall rule name; default based on file name.
@@ -56,9 +57,13 @@
 #
 #.Notes
 #  Author: Jason Fossen (http://www.sans.org/windows-security/)
-# Version: 1.2
-# Updated: 20.Mar.2012
-#   LEGAL: PUBLIC DOMAIN.  SCRIPT PROVIDED "AS IS" WITH NO WARRANTIES OR GUARANTEES OF
+#  Version: 1.2
+#  Updated: 20.Mar.2012
+#
+#  Author: Brandon Buchanan (willjasen)
+#  Updated: 7/25/2019
+#
+#  LEGAL: PUBLIC DOMAIN.  SCRIPT PROVIDED "AS IS" WITH NO WARRANTIES OR GUARANTEES OF
 #          ANY KIND, INCLUDING BUT NOT LIMITED TO MERCHANTABILITY AND/OR FITNESS FOR
 #          A PARTICULAR PURPOSE.  ALL RISKS OF DAMAGE REMAINS WITH THE USER, EVEN IF
 #          THE AUTHOR, SUPPLIER OR DISTRIBUTOR HAS BEEN ADVISED OF THE POSSIBILITY OF
@@ -66,16 +71,8 @@
 #          LIABILITY, THEN DELETE THIS FILE SINCE YOU ARE NOW PROHIBITED TO HAVE IT.
 ####################################################################################
 
-
-#
-#
-# ISO 3166-1 alpha-2
-#
-#
-
-
-
-param ($ZonesFile = "zones.txt", $RuleName, $ProfileType = "any", $InterfaceType = "any", [Switch] $DeleteOnly)
+# Parameters
+param ($ZonesFile = "countrycodes.txt", $RuleName, $ProfileType = "any", $InterfaceType = "any", [Switch] $DeleteOnly)
 
 # Look for some help arguments, show help, then quit.
 if ($ZonesFile -match '/[?h]') { "`nPlease run 'get-help .\import-firewall-blocklist.ps1 -full' for help on PowerShell 2.0 and later, or just read the script's header in a text editor.`n" ; exit }
@@ -86,12 +83,19 @@ $file = Get-Item $ZonesFile -ErrorAction SilentlyContinue # Sometimes rules will
 $zones = Get-Content $file
 $WebClient = New-Object System.Net.WebClient
 
+# If the zones directory doesn't exist, create it
+If(!(Test-Path "zones\")) {
+	New-Item "zones" -Type Directory
+}
+
+# Download and save each country zone file
 ForEach($zone in $zones) {
 	$url = "http://www.ipdeny.com/ipblocks/data/countries/" + $zone.ToLower() + ".zone"
 	$zonefile = "zones\$zone.zone"
 	Invoke-WebRequest -Uri $url -OutFile $zonefile
 }
 
+# Process the zone files
 $zonefiles = Get-ChildItem "zones\." -Filter *.zone
 ForEach($file in $zonefiles) {
 	$zfile = $file.FullName
@@ -130,14 +134,21 @@ ForEach($file in $zonefiles) {
 	do {
 		$icount = $i.tostring().padleft(3,"0")  # Used in name of rule, e.g., BlockList-#042.
 
-		if ($end -gt $linecount) { $end = $linecount }
-		$textranges = [System.String]::Join(",",$($ranges[$($start - 1)..$($end - 1)]))
+		# If there is only one line, then only apply only it
+		if($linecount -eq 1) {
+		  $textranges = $ranges
+		}
+		# otherwise, apply a list
+		else {
+		  if ($end -gt $linecount) { $end = $linecount }
+		  $textranges = [System.String]::Join(",",$($ranges[$($start - 1)..$($end - 1)]))
+		}
 
-		"`nCreating an  inbound firewall rule named '$rulename-#$icount' for IP ranges $start - $end"
+		"Creating an  inbound firewall rule named '$rulename-#$icount' for IP ranges $start - $end"
 		netsh.exe advfirewall firewall add rule name="$rulename-#$icount" dir=in action=block localip=any remoteip="$textranges" description="$description" profile="$profiletype" interfacetype="$interfacetype"
 		if (-not $?) { "`nFailed to create '$rulename-#$icount' inbound rule for some reason, continuing anyway..."}
 
-		"`nCreating an outbound firewall rule named '$rulename-#$icount' for IP ranges $start - $end"
+		"Creating an outbound firewall rule named '$rulename-#$icount' for IP ranges $start - $end"
 		netsh.exe advfirewall firewall add rule name="$rulename-#$icount" dir=out action=block localip=any remoteip="$textranges" description="$description" profile="$profiletype" interfacetype="$interfacetype"
 		if (-not $?) { "`nFailed to create '$rulename-#$icount' outbound rule for some reason, continuing anyway..."}
 
@@ -146,8 +157,6 @@ ForEach($file in $zonefiles) {
 		$end += $maxrangesperrule
 	} while ($start -le $linecount) #>
 }
-
-
 
 # END-O-SCRIPT
 
