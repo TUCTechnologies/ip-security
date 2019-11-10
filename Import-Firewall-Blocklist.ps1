@@ -34,6 +34,11 @@
 #    (Optional) Comma-delimited list of interface types for which the
 #    blocking rules will apply: wireless, ras, lan, any (default = any).
 #
+#.Parameter BlockOutbound
+#    (Optional) Whether or not to block outbound connections. Windows Firewall 
+#    allows outbound connections by default. Blocking outbound connections is useful 
+#    to explicitly allow traffic to known places.
+#
 #.Parameter DeleteOnly
 #    (Switch) Matching firewall rules will be deleted, none will be created.
 #    When used with -RuleName, leave off the "-#1" at the end of the rulename.
@@ -72,12 +77,17 @@
 ####################################################################################
 
 # Parameters
-param ($ZonesFile = "countrycodes.txt", $RuleNameParam, $ProfileTypeParam = "any", $InterfaceTypeParam = "any", [Switch] $DeleteOnlyParam)
+param ($ZonesFile = "countrycodes.txt", $RuleNameParam, $ProfileTypeParam = "any", $InterfaceTypeParam = "any", $BlockOutbound = false, [Switch] $DeleteOnlyParam)
 
 # Functions
 Function ProcessZones {
 	Param($RuleName,$ProfileType,$InterfaceType,$DeleteOnly)
 
+	# Get current state of outbound rules (default is AllowOutbound, other option is BlockOutbound
+	$domainProfileOutbound = netsh advfirewall show domainprofile firewallpolicy | %{ $_.Split(',')[1]; }
+	$privateProfileOutbound = netsh advfirewall show privateprofile firewallpolicy | %{ $_.Split(',')[1]; }
+	$publicProfileOutbound = netsh advfirewall show publicprofile firewallpolicy | %{ $_.Split(',')[1]; }
+	
 	# Process the zone files
 	$zonefiles = Get-ChildItem "zones\." -Filter *.zone
 	ForEach($file in $zonefiles) {
@@ -181,7 +191,7 @@ while($secondsRunning -lt $timeLimit) {
 
 # A key wasn't pressed, so roll back!
 Write-Host "A key wasn't pressed, rolling back changes."
-ProcessZones -RuleName $RuleNameParam -ProfileType $ProfileTypeParam -InterfaceType $InterfaceTypeParam -DeleteOnly $True
+ProcessZones -RuleName $RuleNameParam -ProfileType $ProfileTypeParam -InterfaceType $InterfaceTypeParam -BlockOutbound $BlockOutbound -DeleteOnly $True
 
 
 # END-O-SCRIPT
